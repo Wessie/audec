@@ -12,19 +12,20 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 	"unsafe"
 )
 
 var initError error
 
-// ReadBufferSize is the size of the buffer passed to io.Readers passed to NewDecoder.
+// ReadBufferSize is the size of the internal buffer used by the decoder.
 var ReadBufferSize int = 4096
 
 func init() {
 	initError = toError(C.mpg123_init())
 }
 
-// toError returns an error from the mpg123 integer numeral.
+// toError returns an error string from the mpg123 integer numeral.
 func toError(e C.int) error {
 	if e == C.MPG123_OK {
 		return nil
@@ -32,12 +33,14 @@ func toError(e C.int) error {
 
 	s := C.mpg123_plain_strerror(e)
 	err := errors.New(C.GoString(s))
-	// C.free(unsafe.Pointer(s))
 
-	fmt.Println("returning toerror: ", C.GoString(s))
 	return err
 }
 
+// NewDecoder returns a new decoder to be used for decoding mp3 audio data
+//
+// The Close method should be called when finished with the decoder so as to
+// not leak resources.
 func NewDecoder(r io.Reader) (*Decoder, error) {
 	var e C.int
 	mh := C.mpg123_new(nil, &e)
@@ -58,12 +61,39 @@ func NewDecoder(r io.Reader) (*Decoder, error) {
 }
 
 type Decoder struct {
-	mh  *C.mpg123_handle
+	mh *C.mpg123_handle
+	// reader used for mp3 data
 	src io.Reader
+	// internal scratch buffer
 	buf []byte
+	// protects all fields, don't touch the struct without holding this
+	mu sync.Mutex
+	// indicates if the decoder has been closed
+	closed bool
+}
+
+// Close stops the decoder and frees any resources used by the C
+// code. A Decoder can't be used after calling Close.
+func (d *Decoder) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.closed {
+		return nil
+	}
+
+	C.mpg123_delete(d.mh)
+	d.closed = true
+	return nil
 }
 
 func (d *Decoder) Read(p []byte) (n int, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.closed {
+		return 0, io.EOF
+	}
+
 	var stat C.int
 loop:
 	for {
