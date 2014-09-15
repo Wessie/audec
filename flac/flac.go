@@ -4,8 +4,9 @@
 package flac
 
 import (
-	"github.com/eaburns/flac"
 	"io"
+
+	"github.com/eaburns/flac"
 )
 
 func NewDecoder(r io.Reader) (*Decoder, error) {
@@ -51,4 +52,8 @@ func (d *Decoder) Read(p []byte) (n int, err error) {
 		d.leftover = nil
 		p = p[nn:]
 	}
+}
+
+func (d *Decoder) Close() error {
+	return nil
 }

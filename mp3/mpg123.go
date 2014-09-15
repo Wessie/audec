@@ -9,7 +9,6 @@ import "C"
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -132,7 +131,6 @@ loop:
 			if err != nil {
 				log.Println("error while getting stream format:", err)
 			}
-			fmt.Println(rate, chans, enc)
 			fallthrough
 		default:
 			break loop
